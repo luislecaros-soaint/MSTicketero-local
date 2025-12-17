@@ -49,7 +49,6 @@ class TicketInteractorTest {
         validTicketRequest.setPhoneNumber("999999999");
         validTicketRequest.setAction(0);
         validTicketRequest.setAvgTime(300L);
-
         validInteraccionRequest = new InteraccionRequestDTO();
         validInteraccionRequest.setTicketNumber("A100");
         validInteraccionRequest.setRut("12345678-9");
@@ -104,13 +103,8 @@ class TicketInteractorTest {
         IngresoTicketero existente = new IngresoTicketero();
         existente.setAction(0);
         existente.setStatusWhatsapp("PENDIENTE");
-
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(existente);
-
-        
         GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
-
-        
         assertEquals(200, response.getStatus());
         assertTrue(response.getMessage().contains("duplicado"));
         verify(repositoryPort, never()).saveTicket(any());
@@ -119,41 +113,29 @@ class TicketInteractorTest {
 
     @Test
     void recibirTicket_NuevoExitoso_FlujoCompleto() {
-        
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(null);
         when(notificationPort.enviarNotificacion(any())).thenReturn(true); 
-        
         IngresoTicketero mockGuardado = new IngresoTicketero();
         mockGuardado.setStatusWhatsapp("PENDIENTE");
         when(repositoryPort.saveTicket(any(IngresoTicketero.class))).thenReturn(mockGuardado);
-
         GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
-
         assertEquals(200, response.getStatus());
-        
         ArgumentCaptor<IngresoTicketero> captor = ArgumentCaptor.forClass(IngresoTicketero.class);
         verify(repositoryPort, times(2)).saveTicket(captor.capture());
-     
         assertEquals("ENVIADO", captor.getValue().getStatusWhatsapp());
     }
 
     @Test
     void recibirTicket_FalloAPIExterna_GuardaErrorEnvio() {
-       
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(null);
         when(notificationPort.enviarNotificacion(any())).thenReturn(false); 
-
         IngresoTicketero mockGuardado = new IngresoTicketero();
         mockGuardado.setStatusWhatsapp("PENDIENTE");
         when(repositoryPort.saveTicket(any(IngresoTicketero.class))).thenReturn(mockGuardado);
-
         GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
-
         assertEquals(200, response.getStatus());
-        
         ArgumentCaptor<IngresoTicketero> captor = ArgumentCaptor.forClass(IngresoTicketero.class);
         verify(repositoryPort, times(2)).saveTicket(captor.capture());
-        
         assertEquals("ERROR_ENVIO", captor.getValue().getStatusWhatsapp());
     }
 
@@ -176,11 +158,8 @@ class TicketInteractorTest {
     void registrarInteraccion_MismoEstado_Ignora() {
         IngresoTicketero ticket = new IngresoTicketero();
         ticket.setStatusWhatsapp("LEIDO"); 
-
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(ticket);
-
         GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
-
         assertEquals(200, response.getStatus());
         assertTrue(response.getMessage().contains("sin cambios"));
         verify(repositoryPort, never()).saveInteraccion(any());
@@ -190,11 +169,8 @@ class TicketInteractorTest {
     void registrarInteraccion_EstadoErrorEnvio_Retorna409() {
         IngresoTicketero ticket = new IngresoTicketero();
         ticket.setStatusWhatsapp("ERROR_ENVIO");
-
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(ticket);
-
         GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
-
         assertEquals(409, response.getStatus()); 
         verify(repositoryPort, never()).saveInteraccion(any());
     }
@@ -203,11 +179,8 @@ class TicketInteractorTest {
     void registrarInteraccion_EstadoFinalizado_Ignora() {
         IngresoTicketero ticket = new IngresoTicketero();
         ticket.setStatusWhatsapp("FINALIZADO");
-
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(ticket);
-
         GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
-
         assertEquals(200, response.getStatus());
         assertTrue(response.getMessage().contains("ignorado"));
         verify(repositoryPort, never()).saveInteraccion(any());
@@ -217,15 +190,10 @@ class TicketInteractorTest {
     void registrarInteraccion_Exito_GuardaTrazaYActualizaEstado() {
         IngresoTicketero ticket = new IngresoTicketero();
         ticket.setStatusWhatsapp("ENVIADO");
-
         when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(ticket);
-
         GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
-
         assertEquals(200, response.getStatus());
-        
         verify(repositoryPort).saveInteraccion(any(InteraccionWhatsapp.class));
-        
         ArgumentCaptor<IngresoTicketero> captor = ArgumentCaptor.forClass(IngresoTicketero.class);
         verify(repositoryPort).saveTicket(captor.capture());
         assertEquals("LEIDO", captor.getValue().getStatusWhatsapp());
@@ -256,5 +224,77 @@ class TicketInteractorTest {
         assertEquals(400, response.getStatus());
         assertTrue(response.getMessage().contains("phoneNumber"));
         verify(repositoryPort, never()).saveTicket(any());
+    }
+
+    @Test
+    void recibirTicket_ActionNegativo_Retorna400() {
+        validTicketRequest.setAction(-1); 
+        GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
+        assertEquals(400, response.getStatus());
+        assertTrue(response.getMessage().contains("invalido"));
+    }
+
+    @Test
+    void recibirTicket_Action1_SinAvgTime_EsValido() {
+        validTicketRequest.setAction(1);
+        validTicketRequest.setAvgTime(null);
+        when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(null);
+        when(notificationPort.enviarNotificacion(any())).thenReturn(true);
+        when(repositoryPort.saveTicket(any())).thenAnswer(i -> i.getArgument(0));
+        GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
+        assertEquals(200, response.getStatus());
+    }
+
+    @Test
+    void recibirTicket_Duplicado_MismaAccion_PeroEstadoDistinto_CreaNuevo() {
+        IngresoTicketero existente = new IngresoTicketero();
+        existente.setAction(0);
+        existente.setStatusWhatsapp("ENVIADO"); 
+        when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(existente);
+        when(notificationPort.enviarNotificacion(any())).thenReturn(true);
+        when(repositoryPort.saveTicket(any())).thenAnswer(i -> i.getArgument(0));
+        validTicketRequest.setAction(0); 
+        GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
+        assertEquals(200, response.getStatus());
+        verify(repositoryPort, times(2)).saveTicket(any());
+    }
+
+    @Test
+    void recibirTicket_Duplicado_AccionDistinta_CreaNuevo() {
+        IngresoTicketero existente = new IngresoTicketero();
+        existente.setAction(0);
+        existente.setStatusWhatsapp("PENDIENTE");
+        when(repositoryPort.findUltimoTicket(anyString(), anyString())).thenReturn(existente);
+        when(notificationPort.enviarNotificacion(any())).thenReturn(true);
+        when(repositoryPort.saveTicket(any())).thenAnswer(i -> i.getArgument(0));
+        validTicketRequest.setAction(1); 
+        GeneralResponseDTO response = interactor.recibirTicket(validTicketRequest);
+        assertEquals(200, response.getStatus());
+        verify(repositoryPort, times(2)).saveTicket(any());
+    }
+
+    @Test
+    void registrarInteraccion_TicketNumberNulo_Retorna400() {
+        
+        
+        validInteraccionRequest.setTicketNumber(null);
+        validInteraccionRequest.setRut("12345678-9"); 
+
+        GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
+
+        assertEquals(400, response.getStatus());
+        assertTrue(response.getMessage().contains("datos faltantes"));
+    }
+
+    @Test
+    void registrarInteraccion_RutNulo_Retorna400() {
+        
+        validInteraccionRequest.setTicketNumber("A-100");
+        validInteraccionRequest.setRut(null);
+
+        GeneralResponseDTO response = interactor.registrarInteraccion(validInteraccionRequest);
+
+        assertEquals(400, response.getStatus());
+        assertTrue(response.getMessage().contains("datos faltantes"));
     }
 }

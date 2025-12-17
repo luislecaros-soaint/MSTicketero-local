@@ -29,39 +29,26 @@ class CgsExternalAdapterTest {
 
     @Test
     void enviarNotificacion_Exito_RetornaTrue() {
-        // GIVEN
         TicketRequestDTO request = new TicketRequestDTO();
         request.setTicketNumber("A100");
-
-        // Configuramos el servidor mock
-        // OJO: La URL debe coincidir EXACTAMENTE con lo puesto en application.properties de test
         server.expect(requestTo("http://localhost:8080/api/v1/ticket")) 
               .andExpect(method(HttpMethod.POST))
-              .andExpect(header("X-API-KEY", "secret-key-test")) // Coincide con properties
+              .andExpect(header("X-API-KEY", "secret-key-test"))
               .andRespond(withSuccess());
-
-        // WHEN
         boolean resultado = adapter.enviarNotificacion(request);
-
-        // THEN
-        server.verify(); // Verifica que la llamada ocurrió
+        server.verify();
         assertTrue(resultado);
     }
 
     @Test
     void enviarNotificacion_FalloServidor_RetornaFalse() {
-        // GIVEN
         TicketRequestDTO request = new TicketRequestDTO();
         request.setTicketNumber("A100");
 
         server.expect(requestTo("http://localhost:8080/api/v1/ticket"))
               .andExpect(method(HttpMethod.POST))
               .andRespond(withServerError());
-
-        // WHEN
         boolean resultado = adapter.enviarNotificacion(request);
-
-        // THEN
         server.verify();
         assertFalse(resultado);
     }
